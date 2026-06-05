@@ -1,0 +1,16 @@
+﻿# .gitignore: 忽略临时文件、IDE配置、缓存
+__*
+___*
+__pycache__/
+*.pyc
+.idea/
+config.json
+venv/
+.env
+dist/
+build/
+*.spec
+*.exe
+*.log
+.DS_Store
+Thumbs.db

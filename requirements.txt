@@ -1,0 +1,8 @@
+pynput>=1.7.6
+pyperclip>=1.8.2
+requests>=2.31.0
+edge-tts>=6.1.9
+pyttsx3>=2.90
+pystray>=0.19.4
+Pillow>=10.0.0
+pyinstaller>=6.0.0
