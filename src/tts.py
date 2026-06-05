@@ -18,23 +18,27 @@ class TTSPlayer:
         self._engine_name = engine
         self._speaking = False
         self._stop_flag = False
+        self._loop = None
+        self._loop_lock = threading.Lock()
+        self._warmed_up = False
 
-    def speak(self, text: str):
-        print(f"[EnPop TTS] speak() 被调用, text={text[:30]}")
+    def speak(self, text: str, on_complete=None):
+        print(f"[EnPop TTS] speak() text={text[:30]}")
         """异步朗读文本（不阻塞调用方）
 
         Args:
             text: 要朗读的文本
+            on_complete: 朗读完成後回调
         """
         if not text or self._speaking:
             return
 
         self._stop_flag = False
         self._speaking = True
-        thread = threading.Thread(target=self._speak_sync, args=(text,), daemon=True)
+        thread = threading.Thread(target=self._speak_sync, args=(text, on_complete), daemon=True)
         thread.start()
 
-    def _speak_sync(self, text: str):
+    def _speak_sync(self, text: str, on_complete=None):
         """在内部线程中执行朗读"""
         try:
             if self._engine_name == "edge":
@@ -42,10 +46,71 @@ class TTSPlayer:
             else:
                 self._speak_sapi5(text)
         except Exception as e:
-            print(f"朗读失败: {e}")
+            print(f"[EnPop TTS] 朗读失败: {e}")
         finally:
             self._speaking = False
             self._stop_flag = False
+            if on_complete:
+                try:
+                    on_complete()
+                except Exception:
+                    pass
+
+    def prewarm(self):
+        """在后台预热 edge-tts 模块和连接，减少首次朗读延迟"""
+        if self._engine_name != "edge":
+            print("[EnPop TTS] 非 edge 引擎，跳过预热")
+            return
+        threading.Thread(target=self._do_prewarm, daemon=True).start()
+
+    def _do_prewarm(self):
+        """预热：导入模块 + 初始化事件循环 + 建立 SSL 连接"""
+        print("[EnPop TTS] 开始预热...")
+        tmp = None
+        try:
+            import edge_tts  # noqa: F401
+            loop = self._get_or_create_loop()
+            try:
+                import tempfile
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                    tmp = f.name
+                loop.run_until_complete(
+                    asyncio.wait_for(
+                        edge_tts.Communicate(
+                            "Hello",
+                            voice="en-US-JennyNeural",
+                        ).save(tmp),
+                        timeout=5.0
+                    )
+                )
+            except Exception as e:
+                print(f"[EnPop TTS] 预热请求未完成（非致命）: {e}")
+            finally:
+                if tmp and tmp and os.path.exists(tmp):
+                    try:
+                        os.unlink(tmp)
+                    except Exception:
+                        pass
+
+            try:
+                import pythoncom
+                pythoncom.CoInitialize()
+                pythoncom.CoUninitialize()
+            except ImportError:
+                pass
+
+            self._warmed_up = True
+            print("[EnPop TTS] 预热完成")
+        except Exception as e:
+            print(f"[EnPop TTS] 预热失败（非致命）: {e}")
+
+    def _get_or_create_loop(self):
+        """获取或创建可复用的事件循环"""
+        with self._loop_lock:
+            if self._loop is None or self._loop.is_closed():
+                self._loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self._loop)
+            return self._loop
 
     def _speak_edge(self, text: str):
         print("[EnPop TTS] 使用 edge-tts 引擎")
@@ -58,17 +123,13 @@ class TTSPlayer:
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
                 tmp_path = f.name
 
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(
-                    edge_tts.Communicate(
-                        text,
-                        voice="en-US-JennyNeural",
-                    ).save(tmp_path)
-                )
-            finally:
-                loop.close()
+            loop = self._get_or_create_loop()
+            loop.run_until_complete(
+                edge_tts.Communicate(
+                    text,
+                    voice="en-US-JennyNeural",
+                ).save(tmp_path)
+            )
 
             if self._stop_flag:
                 return

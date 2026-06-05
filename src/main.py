@@ -57,8 +57,9 @@ def main():
 
     # 2. 初始化各模块
     tts_player = TTSPlayer(engine=config.get("tts_engine") or "edge")
+    tts_player.prewarm()
     translator = _get_translator(config)
-    popup = TranslationPopup(tts_callback=lambda text: tts_player.speak(text))
+    popup = TranslationPopup(tts_player=tts_player)
 
     # 3. 创建 tkinter root（隐藏）
     root = tk.Tk()
@@ -112,6 +113,7 @@ def main():
 
         finally:
             _translate_running = False
+
     def _on_quit():
         """退出清理"""
         print("正在退出 EnPop...")

@@ -18,10 +18,13 @@ class TranslationPopup:
 
     _root: Optional[tk.Tk] = None  # 共享的 tkinter 根窗口
 
-    def __init__(self, tts_callback=None):
+    def __init__(self, tts_callback=None, tts_player=None):
         self._window: Optional[tk.Toplevel] = None
         self._tts_callback = tts_callback
+        self._tts_player = tts_player
+        self._speak_btn: Optional[tk.Button] = None
         self._close_timer_id: Optional[str] = None
+        self._drag_start = None
 
     @classmethod
     def set_root(cls, root: tk.Tk):
@@ -81,6 +84,9 @@ class TranslationPopup:
         )
         close_btn.pack(side=tk.RIGHT, padx=(5, 0))
         close_btn.bind("<Button-1>", lambda e: self.close())
+        # Drag support
+        title_frame.bind("<Button-1>", self._start_drag)
+        title_frame.bind("<B1-Motion>", self._do_drag)
 
         # 分隔线
         sep = tk.Frame(frame, bg="#444444", height=1)
@@ -161,8 +167,9 @@ class TranslationPopup:
         speak_btn.pack(side=tk.LEFT, padx=(0, 6))
         speak_btn.bind(
             "<Button-1>",
-            lambda e: self._on_speak(original) if self._tts_callback else None,
+            lambda e: self._on_speak(original),
         )
+        self._speak_btn = speak_btn
 
         dismiss_btn = tk.Button(
             btn_frame,
@@ -212,10 +219,41 @@ class TranslationPopup:
                 pass
             self._close_timer_id = None
 
+    def _start_drag(self, event):
+        self._drag_start = (event.x_root, event.y_root)
+
+    def _do_drag(self, event):
+        if self._drag_start and self._window:
+            dx = event.x_root - self._drag_start[0]
+            dy = event.y_root - self._drag_start[1]
+            x = self._window.winfo_x() + dx
+            y = self._window.winfo_y() + dy
+            self._window.geometry(f"+{x}+{y}")
+            self._drag_start = (event.x_root, event.y_root)
+
     def _on_speak(self, text: str):
-        if self._tts_callback:
+        if self._speak_btn:
+            self._speak_btn.config(text="加载中...", state=tk.DISABLED)
+        if self._tts_player:
+            self._tts_player.speak(text, on_complete=self._on_tts_done)
+        elif self._tts_callback:
             self._tts_callback(text)
         self._start_close_timer()
+
+    def _on_tts_done(self):
+        """TTS 完成回调（TTS 线程中调用，需切到主线程更新 UI）"""
+        root = TranslationPopup._root
+        if root:
+            root.after(0, self._restore_speak_btn)
+
+    def _restore_speak_btn(self):
+        """恢复读按钮状态到正常"""
+        if self._speak_btn:
+            try:
+                self._speak_btn.config(text="朗读原文", state=tk.NORMAL)
+            except tk.TclError:
+                # 窗口已销毁
+                self._speak_btn = None
 
     def close(self):
         self._cancel_close_timer()
