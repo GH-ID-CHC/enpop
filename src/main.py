@@ -121,24 +121,31 @@ def main():
         os._exit(0)
 
     def _on_settings():
-        """托盘菜单 -> 设置快捷键（在独立线程中运行 tkinter 对话框）"""
+        """托盘菜单 -> 设置快捷键（在主线程调度对话框）"""
         import tkinter.simpledialog as simpledialog
+        from threading import Event
+
+        result = {}
+        done_event = Event()
 
         def _show():
-            dlg_root = tk.Tk()
-            dlg_root.withdraw()
             key = simpledialog.askstring(
                 "设置快捷键",
                 "请输入新的快捷键组合\n例如: <ctrl>+<alt>+e\n"
                 "支持修饰键: <ctrl>, <alt>, <shift>, <cmd>",
+                parent=root,
                 initialvalue=config.get("hotkey"),
             )
-            if key and key.strip():
-                config.set("hotkey", key.strip())
-                update_hotkey(key.strip())
-            dlg_root.destroy()
+            result["key"] = key
+            done_event.set()
 
-        threading.Thread(target=_show, daemon=True).start()
+        root.after(0, _show)
+        done_event.wait()
+
+        key = result.get("key")
+        if key and key.strip():
+            config.set("hotkey", key.strip())
+            update_hotkey(key.strip())
 
     # 4. 启动热键监听（后台线程）
     _hotkey_manager = HotkeyManager(callback=_do_translate)
