@@ -57,6 +57,7 @@ class TrayApp:
         self._on_quit = on_quit
         self._icon = None
         self._on_settings = None  # 由 main.py 注入，避免循环导入
+        self._on_api_config = None  # 由 main.py 注入
 
     def run(self):
         """启动托盘图标（阻塞当前线程）"""
@@ -72,6 +73,7 @@ class TrayApp:
             menu=pystray.Menu(
                 Item("翻译/朗读", self._on_translate, default=True),
                 Item("设置快捷键...", self._on_settings_call),
+                Item("配置 API Key...", self._on_api_config_call),
                 Item("切换朗读引擎", self._create_engine_submenu()),
                 pystray.Menu.SEPARATOR,
                 Item("开机自启", self._on_toggle_autostart,
@@ -86,6 +88,11 @@ class TrayApp:
         """调用外部注入的设置回调"""
         if self._on_settings:
             self._on_settings()
+ 
+    def _on_api_config_call(self):
+        """调用外部注入的 API 配置回调"""
+        if self._on_api_config:
+            self._on_api_config()
 
     def _create_engine_submenu(self):
         """创建引擎切换子菜单"""

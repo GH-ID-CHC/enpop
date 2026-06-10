@@ -21,6 +21,7 @@ from src.tts import TTSPlayer
 from src.popup import TranslationPopup
 from src.tray import TrayApp
 from src.constants import APP_NAME, APP_VERSION
+from src.config_dialog import ConfigDialog
 
 # ---- 全局引用（供 tray 模块回调） ----
 _hotkey_manager: HotkeyManager = None
@@ -34,15 +35,10 @@ def update_hotkey(new_hotkey: str):
 
 
 def _get_translator(config: ConfigManager) -> YoudaoTranslator:
-    """创建翻译器，环境变量优先级高于配置文件"""
-    app_key = os.environ.get("ENPOP_YOUDAO_APP_KEY") or config.get("youdao_app_key") or ""
-    app_secret = os.environ.get("ENPOP_YOUDAO_APP_SECRET") or config.get("youdao_app_secret") or ""
+    """从配置文件读取 API Key，不再依赖环境变量"""
+    app_key = config.get("youdao_app_key") or ""
+    app_secret = config.get("youdao_app_secret") or ""
     if not app_key or not app_secret:
-        print("=" * 50)
-        print("警告：未配置有道翻译 API Key")
-        print("请在 config.json 中配置 youdao_app_key 和 youdao_app_secret")
-        print("或设置环境变量 ENPOP_YOUDAO_APP_KEY / ENPOP_YOUDAO_APP_SECRET")
-        print("=" * 50)
         return None
     return YoudaoTranslator(app_key, app_secret)
 
@@ -58,7 +54,7 @@ def main():
     # 2. 初始化各模块
     tts_player = TTSPlayer(engine=config.get("tts_engine") or "edge")
     tts_player.prewarm()
-    translator = _get_translator(config)
+    translator_ref = {"instance": _get_translator(config)}
     popup = TranslationPopup(tts_player=tts_player)
 
     # 3. 创建 tkinter root（隐藏）
@@ -93,9 +89,10 @@ def main():
 
             print(f"[EnPop] 原文: {text[:60]}{chr(46)*3 if len(text) > 60 else chr(46)*0}")
 
-            if translator:
+            t = translator_ref["instance"]
+            if t:
                 try:
-                    result = translator.translate(text)
+                    result = t.translate(text)
                     if result.get("success"):
                         translation = result.get("translation", "")
                         print(f"[EnPop] 译文: {translation[:60]}{chr(46)*3 if len(translation) > 60 else chr(46)*0}")
@@ -149,6 +146,12 @@ def main():
             config.set("hotkey", key.strip())
             update_hotkey(key.strip())
 
+    def _on_api_config():
+        """托盘菜单 -> 配置 API Key（在主线程调度对话框）"""
+        def _on_save(key, secret):
+            translator_ref["instance"] = YoudaoTranslator(key, secret)
+        root.after(0, lambda: ConfigDialog.show(root, config, on_save=_on_save))
+ 
     # 4. 启动热键监听（后台线程）
     _hotkey_manager = HotkeyManager(callback=_do_translate)
     _hotkey_manager.start(config.get("hotkey"))
@@ -156,11 +159,20 @@ def main():
     # 5. 启动系统托盘（后台线程）
     tray = TrayApp(config, _do_translate, _on_quit)
     tray._on_settings = _on_settings
+    tray._on_api_config = _on_api_config
     tray_thread = threading.Thread(target=tray.run, daemon=True)
     tray_thread.start()
 
     print(f"{APP_NAME} 已就绪 — 选中英文后按 {config.get('hotkey')} 翻译")
 
+    # 6a. 首次启动检查：未配置 API Key 则弹出配置对话框
+    if translator_ref["instance"] is None:
+        def _show_first_config():
+            def _on_save(key, secret):
+                translator_ref["instance"] = YoudaoTranslator(key, secret)
+            ConfigDialog.show(root, config, on_save=_on_save)
+        root.after(500, _show_first_config)
+ 
     # 6. 进入 tkinter 主循环（主线程）
     try:
         root.mainloop()
