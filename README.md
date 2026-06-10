@@ -40,7 +40,11 @@ python src/main.py
 ### 打包
 
 ```bash
-pyinstaller build.spec
+pyinstaller --onefile --windowed `
+  --icon assets\icon.ico `
+  --name EnPop `
+  --add-data "assets;assets" `
+  src\main.py
 ```
 
 打包产物：`dist/EnPop.exe`

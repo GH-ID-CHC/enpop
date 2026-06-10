@@ -34,17 +34,25 @@ class ConfigDialog:
      dialog.configure(bg="#2D2D2D")
      dialog.resizable(False, False)
 
-     # 设置窗口大小和位置（居中于 parent）
+     # 窗口尺寸
      win_w, win_h = 500, 380
+ 
+     # 定位：优先居中屏幕，贴合鼠标位置避免覆盖任务栏
      try:
-         px = parent.winfo_x()
-         py = parent.winfo_y()
-         pw = parent.winfo_width() or 400
-         ph = parent.winfo_height() or 300
-         pos_x = px + (pw - win_w) // 2
-         pos_y = py + (ph - win_h) // 2
+         screen_w = parent.winfo_screenwidth()
+         screen_h = parent.winfo_screenheight()
+         # 主屏幕居中
+         pos_x = (screen_w - win_w) // 2
+         pos_y = (screen_h - win_h) // 3  # 略偏上，视觉效果更好
      except Exception:
          pos_x, pos_y = 200, 200
+ 
+     # 边界保护（适应多显示器、第二屏等场景）
+     if pos_x < 20:
+         pos_x = 20
+     if pos_y < 20:
+         pos_y = 20
+ 
      dialog.geometry(f"{win_w}x{win_h}+{pos_x}+{pos_y}")
 
      # ---- 拖拽支持 ----
