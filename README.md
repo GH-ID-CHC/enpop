@@ -1,4 +1,4 @@
-# EnPop
+﻿# EnPop
 
 > **English + Popup** — Windows 全局英文翻译朗读工具
 

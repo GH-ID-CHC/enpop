@@ -1,4 +1,4 @@
-"""EnPop 有道翻译 API 客户端"""
+﻿"""EnPop 有道翻译 API 客户端"""
 
 import hashlib
 import time
@@ -28,11 +28,11 @@ class YoudaoTranslator:
         self._app_key = app_key
         self._app_secret = app_secret
 
-    def _truncate(self, text: str, max_len: int = 20) -> str:
-        """截取文本用于签名，取前 max_len 个字符"""
-        if len(text) <= max_len:
+    def _truncate(self, text: str) -> str:
+        """有道 API 签名截断规则：长度 <= 20 用原文，> 20 取前10+总长度+后10"""
+        if len(text) <= 20:
             return text
-        return text[:max_len]
+        return text[:10] + str(len(text)) + text[-10:]
 
     def _generate_sign(self, text: str, salt: str, curtime: str) -> str:
         """生成签名
