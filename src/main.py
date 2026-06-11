@@ -1,4 +1,4 @@
-"""EnPop - 全局英文翻译朗读工具主入口
+﻿"""EnPop - 全局英文翻译朗读工具主入口
 
 架构：
 - 主线程：tkinter root（隐藏）+ mainloop
@@ -17,6 +17,7 @@ from src.config_manager import ConfigManager
 from src.hotkey import HotkeyManager
 from src.capturer import capture_selected_text
 from src.translator import YoudaoTranslator
+from src.translation_cache import TranslationCache
 from src.tts import TTSPlayer
 from src.popup import TranslationPopup
 from src.tray import TrayApp
@@ -55,6 +56,7 @@ def main():
     tts_player = TTSPlayer(engine=config.get("tts_engine") or "edge")
     tts_player.prewarm()
     translator_ref = {"instance": _get_translator(config)}
+    translation_cache = TranslationCache()
     popup = TranslationPopup(tts_player=tts_player)
 
     # 3. 创建 tkinter root（隐藏）
@@ -72,7 +74,7 @@ def main():
         root.after(0, lambda: popup.show(original, translation))
 
     def _do_translate():
-        """热键触发：捕获 -> 翻译 -> 显示浮窗（在后台线程运行）"""
+        """热键触发：捕获 -> 翻译（缓存优先）-> 显示浮窗（在后台线程运行）"""
         nonlocal _translate_running
         if _translate_running:
             return
@@ -87,7 +89,15 @@ def main():
             if en_chars / max(len(text), 1) < 0.5:
                 return
 
-            print(f"[EnPop] 原文: {text[:60]}{chr(46)*3 if len(text) > 60 else chr(46)*0}")
+            print(f"[EnPop] 原文: {text[:60]}{'...' if len(text) > 60 else ''}")
+
+            # 先查缓存
+            cached = translation_cache.get(text)
+            if cached:
+                print(f"[EnPop] 命中缓存")
+                translation = cached.get("translation", "")
+                _schedule_popup(text, translation)
+                return
 
             t = translator_ref["instance"]
             if t:
@@ -95,7 +105,9 @@ def main():
                     result = t.translate(text)
                     if result.get("success"):
                         translation = result.get("translation", "")
-                        print(f"[EnPop] 译文: {translation[:60]}{chr(46)*3 if len(translation) > 60 else chr(46)*0}")
+                        print(f"[EnPop] 译文: {translation[:60]}{'...' if len(translation) > 60 else ''}")
+                        # 缓存翻译结果
+                        translation_cache.set(text, "en", "zh-CHS", result)
                         _schedule_popup(text, translation)
                         return
                     else:
@@ -151,7 +163,7 @@ def main():
         def _on_save(key, secret):
             translator_ref["instance"] = YoudaoTranslator(key, secret)
         root.after(0, lambda: ConfigDialog.show(root, config, on_save=_on_save))
- 
+
     # 4. 启动热键监听（后台线程）
     _hotkey_manager = HotkeyManager(callback=_do_translate)
     _hotkey_manager.start(config.get("hotkey"))
@@ -172,7 +184,7 @@ def main():
                 translator_ref["instance"] = YoudaoTranslator(key, secret)
             ConfigDialog.show(root, config, on_save=_on_save)
         root.after(500, _show_first_config)
- 
+
     # 6. 进入 tkinter 主循环（主线程）
     try:
         root.mainloop()
@@ -193,4 +205,3 @@ if __name__ == "__main__":
         traceback.print_exc()
         input("按 Enter 退出...")
         sys.exit(1)
-
