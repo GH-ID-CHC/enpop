@@ -35,6 +35,8 @@ python src/main.py
 
 首次运行会自动弹出 API Key 配置窗口，填入上一步获取的 appKey 和 appSecret 即可。
 
+ > 配置文件存储在 `%APPDATA%\EnPop\config.json`，由程序自动管理，用户无需手动编辑。
+ 
 也随时可以通过系统托盘右键菜单 →「配置 API Key...」修改配置。
 
 ### 打包

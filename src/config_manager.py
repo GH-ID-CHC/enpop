@@ -4,7 +4,7 @@ import json
 import sys
 import os
 from pathlib import Path
-from src.constants import DEFAULT_CONFIG, APP_DIR, APPDATA_CONFIG_DIR
+from src.constants import DEFAULT_CONFIG, APP_DIR, APPDATA_CONFIG_DIR, DEV_MODE
 
 
 class ConfigManager:
@@ -19,18 +19,29 @@ class ConfigManager:
 
     def _find_config_path(self) -> Path:
         """按优先级查找配置文件路径"""
-        # 1. 便携模式：exe 同级目录
+        if DEV_MODE:
+            # 开发模式：始终使用 %APPDATA%/EnPop/ ，不暴露于项目目录
+            appdata_path = APPDATA_CONFIG_DIR / self.CONFIG_FILENAME
+            # 一次性迁移：如果旧版 config.json 在项目根目录，搬到 %APPDATA% 并删除
+            old_path = APP_DIR / self.CONFIG_FILENAME
+            if old_path.exists() and not appdata_path.exists():
+                try:
+                    appdata_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(old_path, "r", encoding="utf-8") as f_src:
+                        data = f_src.read()
+                    with open(appdata_path, "w", encoding="utf-8") as f_dst:
+                        f_dst.write(data)
+                    old_path.unlink()
+                except OSError:
+                    pass
+            return appdata_path
+
+        # 打包模式：便携优先，其次 %APPDATA%
         local_path = APP_DIR / self.CONFIG_FILENAME
         if local_path.exists():
             return local_path
 
-        # 2. 安装模式：%APPDATA%/enpop/config.json
-        appdata_path = APPDATA_CONFIG_DIR / self.CONFIG_FILENAME
-        if appdata_path.exists():
-            return appdata_path
-
-        # 3. 默认写入便携模式路径
-        return local_path
+        return APPDATA_CONFIG_DIR / self.CONFIG_FILENAME
 
     def _load(self):
         """从文件加载配置"""

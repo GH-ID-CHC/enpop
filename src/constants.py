@@ -16,8 +16,9 @@ if getattr(sys, "frozen", False):
 else:
     APP_DIR = Path(__file__).resolve().parent.parent
 
-CONFIG_DIR = APP_DIR
+ 
 APPDATA_CONFIG_DIR = Path(os.environ.get("APPDATA", "")) / APP_NAME
+DEV_MODE = not getattr(sys, "frozen", False)
 
 # ----- 默认配置 -----
 DEFAULT_CONFIG = {
